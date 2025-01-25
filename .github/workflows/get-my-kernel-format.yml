@@ -7,7 +7,7 @@ on:
         description: "URL to download the boot.img file"
         required: true
         type: string
-        #default: "https://filebin.net/gp05fto9lulm3qwg/boot.img"  # Default URL if not provided
+        #default: "https://filebin.net/ncztbxa4bka1o02w"  # Default URL if not provided
 
 jobs:
   process-boot-img:
