@@ -32,8 +32,26 @@ jobs:
         run: |
           curl -L -o ak3_package.zip "${{ github.event.inputs.ak3_url }}"
           unzip ak3_package.zip -d ak3_folder
-          kernel_file="ak3_folder/Image" # AK3压缩包中的内核文件名为Image
+          echo "AK3 Package contents:"
+          ls ak3_folder
 
+      - name: Extract Image.gz
+        run: |
+          # 解压 Image.gz 文件
+          if [ -f "ak3_folder/Image.gz" ]; then
+            echo "Extracting Image.gz..."
+            gunzip ak3_folder/Image.gz
+          else
+            echo "Image.gz not found!"
+            exit 1
+          fi
+          # 确保解压后的 Image 文件存在
+          kernel_file="ak3_folder/Image"
+          if [ ! -f "$kernel_file" ]; then
+            echo "Kernel file does not exist after extraction: $kernel_file"
+            exit 1
+          fi
+          
       - name: Unpack boot.img
         run: |
           chmod +x magiskboot
@@ -41,6 +59,7 @@ jobs:
 
       - name: Replace Kernel in boot.img
         run: |
+          echo "Replacing kernel in boot.img with ${kernel_file}"
           cp "${kernel_file}" unpacked/boot.img.kernel
 
       - name: Repack boot.img
