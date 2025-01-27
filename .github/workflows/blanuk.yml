@@ -56,14 +56,16 @@ jobs:
 
       - name: Unpack boot.img
         run: |
+          # 手动创建 unpacked 目录
+          mkdir -p unpacked
           chmod +x magiskboot
           echo "Running magiskboot unpack..."
           ./magiskboot unpack boot.img
-          # 确认 unpack 是否成功
-          if [ ! -d "unpacked" ]; then
-            echo "Unpack failed: 'unpacked' directory not found!"
-            exit 1
-          fi
+          # 将解压的内容复制到 unpacked 目录
+          mv boot.img-ramdisk unpacked/
+          mv boot.img-kernel unpacked/
+          mv boot.img-zImage unpacked/
+          mv boot.img-dtbo unpacked/
           echo "Unpacked boot.img directory contents:"
           ls unpacked
 
