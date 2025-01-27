@@ -54,24 +54,35 @@ jobs:
             exit 1
           fi
 
+      - name: Install magiskboot and add to PATH
+        run: |
+          # 将 magiskboot 添加到系统路径
+          mkdir -p /usr/local/bin
+          cp magiskboot /usr/local/bin/
+          chmod +x /usr/local/bin/magiskboot
+          echo "magiskboot installed and added to PATH"
+          
+          # 确认 magiskboot 是否可以从任何目录调用
+          magiskboot --version
+
       - name: Unpack boot.img to unpacked directory
         run: |
           # 创建 unpacked 目录
           mkdir -p unpacked
-          
-          # 确保 magiskboot 可执行
-          chmod +x magiskboot
-          
-          echo "Running magiskboot unpack to unpacked directory..."
-          
+
+          # 输出 boot.img 信息
+          echo "Verifying boot.img file:"
+          file boot.img
+
           # 在 unpacked 目录下解包 boot.img
-          ./magiskboot unpack boot.img -d unpacked || echo "Magiskboot unpack failed, continuing..."
-          
+          echo "Running magiskboot unpack to unpacked directory..."
+          magiskboot unpack boot.img -d unpacked
+
           # 输出解包后的文件列表
           echo "Unpacked files in unpacked directory:"
           ls -l unpacked
-          
-          # 确保解包成功后文件存在
+
+          # 检查文件是否存在并继续
           if [ ! -f "unpacked/boot.img-ramdisk" ] || [ ! -f "unpacked/boot.img-kernel" ]; then
             echo "Failed to unpack boot.img. Missing files, but continuing with kernel replacement."
           fi
@@ -90,7 +101,7 @@ jobs:
       - name: Repack boot.img
         run: |
           echo "Repacking boot.img..."
-          ./magiskboot repack unpacked/boot.img -d unpacked || echo "Magiskboot repack failed, continuing..."
+          magiskboot repack unpacked/boot.img -d unpacked || echo "Magiskboot repack failed, continuing..."
           if [ ! -f "new_boot.img" ]; then
             echo "Failed to repack boot.img. Exiting."
             exit 1
