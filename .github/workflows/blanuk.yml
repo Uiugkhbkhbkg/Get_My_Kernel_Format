@@ -57,7 +57,13 @@ jobs:
       - name: Unpack boot.img
         run: |
           chmod +x magiskboot
+          echo "Running magiskboot unpack..."
           ./magiskboot unpack boot.img
+          # 确认 unpack 是否成功
+          if [ ! -d "unpacked" ]; then
+            echo "Unpack failed: 'unpacked' directory not found!"
+            exit 1
+          fi
           echo "Unpacked boot.img directory contents:"
           ls unpacked
 
@@ -74,6 +80,7 @@ jobs:
 
       - name: Repack boot.img
         run: |
+          echo "Repacking boot.img..."
           ./magiskboot repack unpacked/boot.img
           if [ ! -f "new_boot.img" ]; then
             echo "Failed to repack boot.img. Exiting."
