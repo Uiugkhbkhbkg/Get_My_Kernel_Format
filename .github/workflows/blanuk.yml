@@ -37,7 +37,7 @@ jobs:
 
       - name: Extract Image.gz
         run: |
-          # 解压 Image.gz 文件
+          # 确保解压 Image.gz 文件
           if [ -f "ak3_folder/Image.gz" ]; then
             echo "Extracting Image.gz..."
             gunzip ak3_folder/Image.gz
@@ -45,18 +45,21 @@ jobs:
             echo "Image.gz not found!"
             exit 1
           fi
+          
           # 确保解压后的 Image 文件存在
           kernel_file="ak3_folder/Image"
+          echo "Kernel file path: $kernel_file"  # 打印变量值，确保路径正确
           if [ ! -f "$kernel_file" ]; then
             echo "Kernel file does not exist after extraction: $kernel_file"
             exit 1
           fi
-          echo "Kernel file path: $kernel_file"  # 打印变量值，确保路径正确
 
       - name: Unpack boot.img
         run: |
           chmod +x magiskboot
           ./magiskboot unpack boot.img
+          echo "Unpacked boot.img directory contents:"
+          ls unpacked
 
       - name: Replace Kernel in boot.img
         run: |
@@ -67,6 +70,7 @@ jobs:
             exit 1
           fi
           cp "${kernel_file}" unpacked/boot.img.kernel
+          echo "Kernel replacement completed."
 
       - name: Repack boot.img
         run: |
@@ -75,5 +79,3 @@ jobs:
             echo "Failed to repack boot.img. Exiting."
             exit 1
           fi
-
-      # Optionally: Upload the new boot.img somewhere or deploy it to a device
