@@ -1,0 +1,150 @@
+name: Replace Kernel in boot.img
+
+on:
+  workflow_dispatch:
+    inputs:
+      boot_img_url:
+        description: "URL to download the boot.img file"
+        required: true
+        type: string
+      ak3_url:
+        description: "URL to download the AK3 package"
+        required: true
+        type: string
+
+jobs:
+  replace-kernel:
+    runs-on: ubuntu-latest
+    steps:
+      
+      # Step 1: Checkout the repository
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      # Step 2: Download boot.img
+      - name: Download boot.img
+        run: |
+          echo "Downloading boot.img from ${GITHUB_EVENT_INPUTS_BOOT_IMG_URL}"
+          curl -L -o boot.img "${{ github.event.inputs.boot_img_url }}"
+          if [ ! -f "boot.img" ]; then
+            echo "Failed to download boot.img. Exiting."
+            exit 1
+          fi
+
+      # Step 3: Download AK3 package
+      - name: Download AK3 package
+        run: |
+          echo "Downloading AK3 package from ${GITHUB_EVENT_INPUTS_AK3_URL}"
+          curl -L -o ak3_package.zip "${{ github.event.inputs.ak3_url }}"
+          if [ ! -f "ak3_package.zip" ]; then
+            echo "Failed to download AK3 package. Exiting."
+            exit 1
+          fi
+
+      # Step 4: Unzip the AK3 package
+      - name: Unzip AK3 package
+        run: |
+          unzip -qo ak3_package.zip -d ak3_folder
+          if [ ! -f "ak3_folder/Image.gz" ]; then
+            echo "AK3 package does not contain Image.gz!"
+            exit 1
+          fi
+
+      # Step 5: Upload the replace_kernel.sh script
+      - name: Upload replace_kernel.sh script
+        run: |
+          cat << 'EOF' > replace_kernel.sh
+#!/bin/bash
+
+set -e  # 遇到错误退出
+set -o pipefail  # 管道错误传播
+
+# 确保参数正确
+if [[ $# -lt 2 ]]; then
+    echo "Usage: $0 <boot.img> <ak3_package.zip>"
+    exit 1
+fi
+
+BOOT_IMG="$1"
+AK3_PACKAGE="$2"
+
+# 检查依赖
+if ! command -v magiskboot &>/dev/null; then
+    echo "Error: magiskboot is not installed or not in PATH."
+    exit 1
+fi
+
+# 准备工作目录
+WORKDIR=$(mktemp -d)
+echo "Working directory: $WORKDIR"
+
+# 解压 boot.img
+echo "Unpacking boot.img..."
+cd "$WORKDIR"
+magiskboot unpack "$BOOT_IMG" || { echo "Failed to unpack boot.img"; exit 1; }
+
+# 检查解包内容
+echo "Checking unpacked files..."
+if [[ ! -f "kernel" || ! -f "ramdisk.cpio" ]]; then
+    echo "Error: Unpacked boot.img is missing critical files (kernel or ramdisk)."
+    exit 1
+fi
+
+# 解压 AK3 包
+echo "Unpacking AK3 package..."
+unzip -qo "$AK3_PACKAGE" -d ak3_package
+if [[ ! -f "ak3_package/Image.gz" ]]; then
+    echo "Error: AK3 package does not contain Image.gz"
+    exit 1
+fi
+
+# 解压 Image.gz
+echo "Extracting Image.gz..."
+gunzip -c "ak3_package/Image.gz" > "kernel_new"
+if [[ ! -f "kernel_new" ]]; then
+    echo "Error: Failed to extract kernel from Image.gz"
+    exit 1
+fi
+
+# 替换内核
+echo "Replacing kernel..."
+mv "kernel_new" "kernel"
+
+# 重新打包 boot.img
+echo "Repacking boot.img..."
+magiskboot repack "$BOOT_IMG"
+
+# 检查打包结果
+if [[ ! -f "new-boot.img" ]]; then
+    echo "Error: Failed to repack boot.img"
+    exit 1
+fi
+
+# 输出结果
+FINAL_BOOT_IMG="new-boot.img"
+mv "$FINAL_BOOT_IMG" .
+echo "Repacked boot.img saved as $FINAL_BOOT_IMG"
+
+# 清理临时目录
+echo "Cleaning up..."
+cd -
+rm -rf "$WORKDIR"
+
+echo "Done!"
+EOF
+
+      # Step 6: Make the script executable
+      - name: Make replace_kernel.sh executable
+        run: chmod +x replace_kernel.sh
+
+      # Step 7: Run the shell script
+      - name: Run replace_kernel.sh
+        run: |
+          ./replace_kernel.sh boot.img ak3_package.zip
+          
+      # Step 8: Upload the final boot.img file
+      - name: Upload new-boot.img
+        uses: actions/upload-artifact@v3
+        with:
+          name: new-boot-img
+          path: new-boot.img
