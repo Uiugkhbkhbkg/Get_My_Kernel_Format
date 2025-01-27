@@ -51,7 +51,8 @@ jobs:
             echo "Kernel file does not exist after extraction: $kernel_file"
             exit 1
           fi
-          
+          echo "Kernel file path: $kernel_file"  # 打印变量值，确保路径正确
+
       - name: Unpack boot.img
         run: |
           chmod +x magiskboot
@@ -60,6 +61,11 @@ jobs:
       - name: Replace Kernel in boot.img
         run: |
           echo "Replacing kernel in boot.img with ${kernel_file}"
+          # 确保kernel_file变量正确
+          if [ ! -f "$kernel_file" ]; then
+            echo "Kernel file does not exist at ${kernel_file}!"
+            exit 1
+          fi
           cp "${kernel_file}" unpacked/boot.img.kernel
 
       - name: Repack boot.img
