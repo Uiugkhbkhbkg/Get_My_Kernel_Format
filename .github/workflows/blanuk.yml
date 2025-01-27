@@ -1,150 +1,69 @@
-name: Replace Kernel in boot.img
+name: Modify boot.img with new Kernel
 
 on:
   workflow_dispatch:
     inputs:
-      boot_img_url:
-        description: "URL to download the boot.img file"
+      file_url_boot:
+        description: 'URL of the boot.img file to download'
         required: true
-        type: string
-      ak3_url:
-        description: "URL to download the AK3 package"
+      file_url_ak3:
+        description: 'URL of the ak3.zip file to download'
         required: true
-        type: string
 
 jobs:
-  replace-kernel:
+  modify_boot_img:
     runs-on: ubuntu-latest
+
     steps:
-      
-      # Step 1: Checkout the repository
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Step 2: Download boot.img
-      - name: Download boot.img
+      - name: Download boot.img from URL
         run: |
-          echo "Downloading boot.img from ${GITHUB_EVENT_INPUTS_BOOT_IMG_URL}"
-          curl -L -o boot.img "${{ github.event.inputs.boot_img_url }}"
-          if [ ! -f "boot.img" ]; then
-            echo "Failed to download boot.img. Exiting."
-            exit 1
-          fi
-
-      # Step 3: Download AK3 package
-      - name: Download AK3 package
-        run: |
-          echo "Downloading AK3 package from ${GITHUB_EVENT_INPUTS_AK3_URL}"
-          curl -L -o ak3_package.zip "${{ github.event.inputs.ak3_url }}"
-          if [ ! -f "ak3_package.zip" ]; then
-            echo "Failed to download AK3 package. Exiting."
-            exit 1
-          fi
-
-      # Step 4: Unzip the AK3 package
-      - name: Unzip AK3 package
-        run: |
-          unzip -qo ak3_package.zip -d ak3_folder
-          if [ ! -f "ak3_folder/Image.gz" ]; then
-            echo "AK3 package does not contain Image.gz!"
-            exit 1
-          fi
-
-      # Step 5: Upload the replace_kernel.sh script
-      - name: Upload replace_kernel.sh script
-        run: |
-          cat << 'EOF' > replace_kernel.sh
-#!/bin/bash
-
-set -e  # Stop the script on error
-set -o pipefail  # Propagate errors in pipes
-
-# Check parameters
-if [[ $# -lt 2 ]]; then
-    echo "Usage: $0 <boot.img> <ak3_package.zip>"
-    exit 1
-fi
-
-BOOT_IMG="$1"
-AK3_PACKAGE="$2"
-
-# Ensure magiskboot is available
-if ! command -v magiskboot &>/dev/null; then
-    echo "Error: magiskboot is not installed or not in PATH."
-    exit 1
-fi
-
-# Prepare working directory
-WORKDIR=$(mktemp -d)
-echo "Working directory: $WORKDIR"
-
-# Unpack boot.img
-echo "Unpacking boot.img..."
-cd "$WORKDIR"
-magiskboot unpack "$BOOT_IMG" || { echo "Failed to unpack boot.img"; exit 1; }
-
-# Check unpacked contents
-echo "Checking unpacked files..."
-if [[ ! -f "kernel" || ! -f "ramdisk.cpio" ]]; then
-    echo "Error: Unpacked boot.img is missing critical files (kernel or ramdisk)."
-    exit 1
-fi
-
-# Unzip AK3 package
-echo "Unpacking AK3 package..."
-unzip -qo "$AK3_PACKAGE" -d ak3_package
-if [[ ! -f "ak3_package/Image.gz" ]]; then
-    echo "Error: AK3 package does not contain Image.gz"
-    exit 1
-fi
-
-# Extract the kernel from Image.gz
-echo "Extracting kernel from Image.gz..."
-gunzip -c "ak3_package/Image.gz" > "kernel_new"
-if [[ ! -f "kernel_new" ]]; then
-    echo "Error: Failed to extract kernel from Image.gz"
-    exit 1
-fi
-
-# Replace the kernel in boot.img
-echo "Replacing kernel..."
-mv "kernel_new" "kernel"
-
-# Repack boot.img
-echo "Repacking boot.img..."
-magiskboot repack "$BOOT_IMG"
-
-# Check for the repacked boot.img
-if [[ ! -f "new-boot.img" ]]; then
-    echo "Error: Failed to repack boot.img"
-    exit 1
-fi
-
-# Move the new boot.img
-FINAL_BOOT_IMG="new-boot.img"
-mv "$FINAL_BOOT_IMG" .
-echo "Repacked boot.img saved as $FINAL_BOOT_IMG"
-
-# Clean up the working directory
-echo "Cleaning up..."
-cd -
-rm -rf "$WORKDIR"
-
-echo "Done!"
-EOF
-
-      # Step 6: Make replace_kernel.sh executable
-      - name: Make replace_kernel.sh executable
-        run: chmod +x replace_kernel.sh
-
-      # Step 7: Run the shell script to replace kernel
-      - name: Run replace_kernel.sh
-        run: |
-          ./replace_kernel.sh boot.img ak3_package.zip
+          curl -L ${{ github.event.inputs.file_url_boot }} -o /tmp/boot.img
           
-      # Step 8: Upload the final boot.img
-      - name: Upload new-boot.img
+      - name: Download ak3.zip from URL
+        run: |
+          curl -L ${{ github.event.inputs.file_url_ak3 }} -o /tmp/ak3.zip
+
+      - name: Install required tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl unzip gzip
+
+      - name: Create the shell script
+        run: |
+          echo "#!/bin/bash" > modify_boot.sh
+          echo "BOOT_IMAGE='/tmp/boot.img'" >> modify_boot.sh
+          echo "AK3_ARCHIVE='/tmp/ak3.zip'" >> modify_boot.sh
+          echo "OUTPUT_BOOT_IMAGE='/tmp/new_boot.img'" >> modify_boot.sh
+          echo "TEMP_DIR=\$(mktemp -d)" >> modify_boot.sh
+          echo "mkdir -p \"\$TEMP_DIR/boot\"" >> modify_boot.sh
+          echo "magiskboot unpack \"\$BOOT_IMAGE\" \"\$TEMP_DIR/boot\"" >> modify_boot.sh
+          echo "unzip -q \"\$AK3_ARCHIVE\" -d \"\$TEMP_DIR/ak3\"" >> modify_boot.sh
+          echo "AK3_KERNEL=\"\$TEMP_DIR/ak3/Image\"" >> modify_boot.sh
+          echo "if [[ \"\$AK3_KERNEL\" =~ \.gz\$ ]]; then" >> modify_boot.sh
+          echo "    gunzip -c \"\$AK3_KERNEL\" > \"\$TEMP_DIR/ak3/kernel\"" >> modify_boot.sh
+          echo "    AK3_KERNEL=\"\$TEMP_DIR/ak3/kernel\"" >> modify_boot.sh
+          echo "elif [[ \"\$AK3_KERNEL\" =~ \.xz\$ ]]; then" >> modify_boot.sh
+          echo "    unxz -c \"\$AK3_KERNEL\" > \"\$TEMP_DIR/ak3/kernel\"" >> modify_boot.sh
+          echo "    AK3_KERNEL=\"\$TEMP_DIR/ak3/kernel\"" >> modify_boot.sh
+          echo "elif [[ \"\$AK3_KERNEL\" =~ \.lzma\$ ]]; then" >> modify_boot.sh
+          echo "    unlzma -c \"\$AK3_KERNEL\" > \"\$TEMP_DIR/ak3/kernel\"" >> modify_boot.sh
+          echo "    AK3_KERNEL=\"\$TEMP_DIR/ak3/kernel\"" >> modify_boot.sh
+          echo "fi" >> modify_boot.sh
+          echo "cp \"\$AK3_KERNEL\" \"\$TEMP_DIR/boot/kernel\"" >> modify_boot.sh
+          echo "magiskboot repack \"\$TEMP_DIR/boot\" \"\$OUTPUT_BOOT_IMAGE\"" >> modify_boot.sh
+          echo "rm -rf \"\$TEMP_DIR\"" >> modify_boot.sh
+          echo "echo '操作完成，新的boot镜像已生成: \$OUTPUT_BOOT_IMAGE'" >> modify_boot.sh
+          chmod +x modify_boot.sh
+
+      - name: Run the shell script
+        run: |
+          ./modify_boot.sh
+
+      - name: Upload modified boot.img
         uses: actions/upload-artifact@v3
         with:
-          name: new-boot-img
-          path: new-boot.img
+          name: modified-boot-img
+          path: /tmp/new_boot.img
