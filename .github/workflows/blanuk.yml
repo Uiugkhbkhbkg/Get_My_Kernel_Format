@@ -1,0 +1,54 @@
+name: Replace Kernel in boot.img from AK3 Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      boot_img_url:
+        description: "URL to download the boot.img file"
+        required: true
+        type: string
+      ak3_url:
+        description: "URL to download the AK3 package"
+        required: true
+        type: string
+
+jobs:
+  replace-kernel:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Download boot.img
+        run: |
+          curl -L -o boot.img "${{ github.event.inputs.boot_img_url }}"
+          if [ ! -f "boot.img" ]; then
+            echo "Failed to download boot.img. Exiting."
+            exit 1
+          fi
+
+      - name: Download AK3 Package
+        run: |
+          curl -L -o ak3_package.zip "${{ github.event.inputs.ak3_url }}"
+          unzip ak3_package.zip -d ak3_folder
+          kernel_file="ak3_folder/Image" # AK3压缩包中的内核文件名为Image
+
+      - name: Unpack boot.img
+        run: |
+          chmod +x magiskboot
+          ./magiskboot unpack boot.img
+
+      - name: Replace Kernel in boot.img
+        run: |
+          cp "${kernel_file}" unpacked/boot.img.kernel
+
+      - name: Repack boot.img
+        run: |
+          ./magiskboot repack unpacked/boot.img
+          if [ ! -f "new_boot.img" ]; then
+            echo "Failed to repack boot.img. Exiting."
+            exit 1
+          fi
+
+      # Optionally: Upload the new boot.img somewhere or deploy it to a device
